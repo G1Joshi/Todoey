@@ -5,44 +5,57 @@
 //  Created by Jeevan Chandra Joshi on 17/01/23.
 //
 
+import ChameleonFramework
 import CoreData
+import SwipeCellKit
 import UIKit
 
 class CategoryViewController: UITableViewController {
     let context = (UIApplication.shared.delegate as! AppDelegate).persistentContainer.viewContext
 
     let addButton = UIBarButtonItem()
-    let backButton = UIBarButtonItem()
     let searchBar = UISearchBar()
 
     var categories = [Category]()
 
     override func viewDidLoad() {
         super.viewDidLoad()
+        title = "Todoey"
         view.backgroundColor = .systemBackground
-        title = "Categories"
         navigationItem.rightBarButtonItem = addButton
         navigationItem.titleView = searchBar
-        navigationItem.leftBarButtonItem = backButton
 
         searchBar.delegate = self
 
-        tableView.register(UITableViewCell.self, forCellReuseIdentifier: "CategoryCell")
+        tableView.register(SwipeTableViewCell.self, forCellReuseIdentifier: "CategoryCell")
+        tableView.separatorStyle = .none
 
         addButton.image = UIImage(systemName: "plus")
         addButton.target = self
         addButton.action = #selector(addButtonPressed)
 
-        backButton.image = UIImage(systemName: "chevron.left")
-        backButton.target = self
-        backButton.tintColor = .systemBackground
-
         loadCategories()
     }
 
+    override func viewWillAppear(_ animated: Bool) {
+        let color = UIColor.systemCyan
+        let appearance = UINavigationBarAppearance()
+        appearance.backgroundColor = color
+        appearance.largeTitleTextAttributes = [NSAttributedString.Key.foregroundColor: ContrastColorOf(color, returnFlat: true)]
+        navigationController?.navigationBar.prefersLargeTitles = true
+        navigationController?.navigationBar.standardAppearance = appearance
+        navigationController?.navigationBar.scrollEdgeAppearance = appearance
+        navigationController?.navigationBar.tintColor = ContrastColorOf(color, returnFlat: true)
+    }
+
     override func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
-        let cell = tableView.dequeueReusableCell(withIdentifier: "CategoryCell", for: indexPath)
+        let cell = tableView.dequeueReusableCell(withIdentifier: "CategoryCell", for: indexPath) as! SwipeTableViewCell
         cell.textLabel?.text = categories[indexPath.row].title
+        if let color = UIColor(hexString: categories[indexPath.row].color!) {
+            cell.backgroundColor = color
+            cell.textLabel?.textColor = ContrastColorOf(color, returnFlat: true)
+        }
+        cell.delegate = self
         return cell
     }
 
@@ -51,11 +64,13 @@ class CategoryViewController: UITableViewController {
     }
 
     override func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
-        let itemViewController = ItemViewController()
-        if let indexPath = tableView.indexPathForSelectedRow {
-            itemViewController.category = categories[indexPath.row]
-            navigationController?.pushViewController(itemViewController, animated: true)
-        }
+        let itemViewController = ItemViewController(category: categories[indexPath.row])
+        navigationController?.pushViewController(itemViewController, animated: true)
+        tableView.deselectRow(at: indexPath, animated: true)
+    }
+
+    override func tableView(_ tableView: UITableView, heightForRowAt indexPath: IndexPath) -> CGFloat {
+        80
     }
 
     @objc func addButtonPressed() {
@@ -65,6 +80,7 @@ class CategoryViewController: UITableViewController {
             if let category = textField.text {
                 let newCategory = Category(context: self.context)
                 newCategory.title = category
+                newCategory.color = UIColor.randomFlat().hexValue()
                 self.categories.append(newCategory)
                 self.saveCategories()
             }
@@ -121,5 +137,21 @@ extension CategoryViewController: UISearchBarDelegate {
                 searchBar.resignFirstResponder()
             }
         }
+    }
+}
+
+extension CategoryViewController: SwipeTableViewCellDelegate {
+    func tableView(_ tableView: UITableView, editActionsForRowAt indexPath: IndexPath, for orientation: SwipeCellKit.SwipeActionsOrientation) -> [SwipeCellKit.SwipeAction]? {
+        guard orientation == .right else { return nil }
+
+        let deleteAction = SwipeAction(style: .destructive, title: "Delete") { [self] _, _ in
+            context.delete(categories[indexPath.row])
+            categories.remove(at: indexPath.row)
+            saveCategories()
+        }
+
+        deleteAction.image = UIImage(systemName: "trash")
+
+        return [deleteAction]
     }
 }

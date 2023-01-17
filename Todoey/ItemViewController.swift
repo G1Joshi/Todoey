@@ -5,7 +5,9 @@
 //  Created by Jeevan Chandra Joshi on 17/01/23.
 //
 
+import ChameleonFramework
 import CoreData
+import SwipeCellKit
 import UIKit
 
 class ItemViewController: UITableViewController {
@@ -15,25 +17,30 @@ class ItemViewController: UITableViewController {
     let backButton = UIBarButtonItem()
     let searchBar = UISearchBar()
 
-    var category: Category? {
-        didSet {
-            loadItems()
-        }
+    var category: Category
+    var items = [Item]()
+
+    init(category: Category) {
+        self.category = category
+        super.init(style: .plain)
     }
 
-    var items = [Item]()
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
 
     override func viewDidLoad() {
         super.viewDidLoad()
+        title = category.title
         view.backgroundColor = .systemBackground
-        title = "Items"
         navigationItem.rightBarButtonItem = addButton
         navigationItem.titleView = searchBar
         navigationItem.leftBarButtonItem = backButton
 
         searchBar.delegate = self
 
-        tableView.register(UITableViewCell.self, forCellReuseIdentifier: "ItemCell")
+        tableView.register(SwipeTableViewCell.self, forCellReuseIdentifier: "ItemCell")
+        tableView.separatorStyle = .none
 
         addButton.image = UIImage(systemName: "plus")
         addButton.target = self
@@ -42,12 +49,31 @@ class ItemViewController: UITableViewController {
         backButton.image = UIImage(systemName: "chevron.left")
         backButton.target = self
         backButton.action = #selector(backButtonPressed)
+
+        loadItems()
+    }
+
+    override func viewWillAppear(_ animated: Bool) {
+        if let color = UIColor(hexString: category.color!) {
+            let appearance = UINavigationBarAppearance()
+            appearance.backgroundColor = color
+            appearance.largeTitleTextAttributes = [NSAttributedString.Key.foregroundColor: ContrastColorOf(color, returnFlat: true)]
+            navigationController?.navigationBar.prefersLargeTitles = true
+            navigationController?.navigationBar.standardAppearance = appearance
+            navigationController?.navigationBar.scrollEdgeAppearance = appearance
+            navigationController?.navigationBar.tintColor = ContrastColorOf(color, returnFlat: true)
+        }
     }
 
     override func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
-        let cell = tableView.dequeueReusableCell(withIdentifier: "ItemCell", for: indexPath)
+        let cell = tableView.dequeueReusableCell(withIdentifier: "ItemCell", for: indexPath) as! SwipeTableViewCell
         cell.textLabel?.text = items[indexPath.row].title
+        if let color = UIColor(hexString: category.color!)?.darken(byPercentage: CGFloat(indexPath.row) / CGFloat(items.count)) {
+            cell.backgroundColor = color
+            cell.textLabel?.textColor = ContrastColorOf(color, returnFlat: true)
+        }
         cell.accessoryType = items[indexPath.row].isDone ? .checkmark : .none
+        cell.delegate = self
         return cell
     }
 
@@ -59,6 +85,10 @@ class ItemViewController: UITableViewController {
         items[indexPath.row].isDone.toggle()
         saveItems()
         tableView.deselectRow(at: indexPath, animated: true)
+    }
+
+    override func tableView(_ tableView: UITableView, heightForRowAt indexPath: IndexPath) -> CGFloat {
+        80
     }
 
     @objc func addButtonPressed() {
@@ -89,7 +119,7 @@ class ItemViewController: UITableViewController {
 
 extension ItemViewController {
     func loadItems(_ request: NSFetchRequest<Item> = Item.fetchRequest(), _ predicate: NSPredicate? = nil) {
-        let categoryPredicate = NSPredicate(format: "category.title MATCHES %@", category!.title!)
+        let categoryPredicate = NSPredicate(format: "category.title MATCHES %@", category.title!)
         if let addtionalPredicate = predicate {
             request.predicate = NSCompoundPredicate(andPredicateWithSubpredicates: [categoryPredicate, addtionalPredicate])
         } else {
@@ -135,5 +165,21 @@ extension ItemViewController: UISearchBarDelegate {
                 searchBar.resignFirstResponder()
             }
         }
+    }
+}
+
+extension ItemViewController: SwipeTableViewCellDelegate {
+    func tableView(_ tableView: UITableView, editActionsForRowAt indexPath: IndexPath, for orientation: SwipeCellKit.SwipeActionsOrientation) -> [SwipeCellKit.SwipeAction]? {
+        guard orientation == .right else { return nil }
+
+        let deleteAction = SwipeAction(style: .destructive, title: "Delete") { [self] _, _ in
+            context.delete(items[indexPath.row])
+            items.remove(at: indexPath.row)
+            saveItems()
+        }
+
+        deleteAction.image = UIImage(systemName: "trash")
+
+        return [deleteAction]
     }
 }
